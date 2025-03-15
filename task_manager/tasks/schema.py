@@ -34,6 +34,8 @@ class Query(graphene.ObjectType):
     task = graphene.Field(TaskType, id=graphene.Int(required=True))
     all_tasks = graphene.List(TaskType)
     all_users = graphene.List(UserType)
+    tasks_by_owner = graphene.List(TaskType, owner_username=graphene.String(required=True))
+    tasks_by_assignee = graphene.List(TaskType, assignee_username=graphene.String(required=True))
 
     def resolve_task(self, info, id):
         return Task.objects.get(pk=id)
@@ -43,6 +45,12 @@ class Query(graphene.ObjectType):
 
     def resolve_all_users(self, info):
         return User.objects.all()
+    def resolve_tasks_by_owner(self, info, owner_username):
+        return Task.objects.filter(owner__username__icontains=owner_username)
+    
+    def resolve_tasks_by_assignee(self, info, assignee_username):
+        return Task.objects.filter(assignee__username__icontains=assignee_username)
+
 
 # Mutation thêm Task
 class CreateTask(graphene.Mutation):
@@ -87,11 +95,33 @@ class DeleteTask(graphene.Mutation):
         task = Task.objects.get(pk=id)
         task.delete()
         return DeleteTask(success=True)
+# Mutation để cập nhật Task
+class UpdateTask(graphene.Mutation):
+    class Arguments:
+        id = graphene.ID(required=True)
+        title = graphene.String()
+        description = graphene.String()
+        assignee_id = graphene.Int()
 
-# Schema tổng hợp
+    task = graphene.Field(TaskType)
+
+    def mutate(self, info, id, title=None, description=None, assignee_id=None):
+        task = Task.objects.get(pk=id)
+        if title:
+            task.title = title
+        if description:
+            task.description = description
+        if assignee_id:
+            task.assignee = User.objects.get(id=assignee_id)
+        task.save()
+        return UpdateTask(task=task)
+
+
 class Mutation(graphene.ObjectType):
-    create_task = CreateTask.Field()
-    delete_task = DeleteTask.Field()
-    create_user = CreateUser.Field()
+    createTask = CreateTask.Field()
+    deleteTask = DeleteTask.Field()
+    createUser = CreateUser.Field()
+    updateTask = UpdateTask.Field()  
+
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
