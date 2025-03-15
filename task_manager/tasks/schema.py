@@ -44,7 +44,7 @@ class Query(graphene.ObjectType):
     def resolve_all_users(self, info):
         return User.objects.all()
 
-# Mutation để thêm Task
+# Mutation thêm Task
 class CreateTask(graphene.Mutation):
     class Arguments:
         title = graphene.String(required=True)
