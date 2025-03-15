@@ -23,11 +23,12 @@ class TaskType(DjangoObjectType):
 class TaskFilter(FilterSet):
     owner_username = CharFilter(field_name='owner__username', lookup_expr='icontains')
     assignee_username = CharFilter(field_name='assignee__username', lookup_expr='icontains')
+    title = CharFilter(field_name='title', lookup_expr='icontains')
     order_by = OrderingFilter(fields=('created_at', 'updated_at'))
 
     class Meta:
         model = Task
-        fields = ['owner_username', 'assignee_username']
+        fields = ['owner_username', 'assignee_username', 'title']
 
 # Query GraphQL
 class Query(graphene.ObjectType):
@@ -36,6 +37,7 @@ class Query(graphene.ObjectType):
     all_users = graphene.List(UserType)
     tasks_by_owner = graphene.List(TaskType, owner_username=graphene.String(required=True))
     tasks_by_assignee = graphene.List(TaskType, assignee_username=graphene.String(required=True))
+    tasks_by_title = graphene.List(TaskType, title=graphene.String(required=True))
 
     def resolve_task(self, info, id):
         return Task.objects.get(pk=id)
@@ -50,6 +52,8 @@ class Query(graphene.ObjectType):
     
     def resolve_tasks_by_assignee(self, info, assignee_username):
         return Task.objects.filter(assignee__username__icontains=assignee_username)
+    def resolve_tasks_by_title(self, info, title):
+        return Task.objects.filter(title__icontains=title)
 
 
 # Mutation thêm Task
