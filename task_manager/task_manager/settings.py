@@ -47,7 +47,12 @@ INSTALLED_APPS = [
     'tasks',  # Thêm app quản lý task
     'corsheaders',
 ]
-
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"  # Hoặc SMTP của dịch vụ email bạn dùng
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = "nhducminhqt@gmail.com"
+EMAIL_HOST_PASSWORD = "xmaq ggav nrrp gzrc"
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',

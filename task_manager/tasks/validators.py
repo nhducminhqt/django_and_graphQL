@@ -21,6 +21,8 @@ def validate_password(password, max_length=30):
         raise ValidationError(f"Password too long (maximum {max_length} characters).")
 
 def validate_user_email(email):
+    if len(email) > 100:
+        raise ValidationError(f"Password too long (maximum {100} characters).")
     try:
         validate_email(email)
     except ValidationError:

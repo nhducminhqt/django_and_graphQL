@@ -3,6 +3,7 @@ from graphene_django.types import DjangoObjectType
 from django_filters import FilterSet, CharFilter, OrderingFilter
 from .models import Task
 from django.contrib.auth.models import User
+from django.core.mail import send_mail
 from .validators import (
     validate_status,
     validate_title,
@@ -103,6 +104,16 @@ class CreateTask(graphene.Mutation):
 
         task = Task(title=title, description=description, owner=owner, assignee=assignee, status=status)
         task.save()
+        if assignee and assignee.email:
+            subject = f"New Task Assigned: {task.title}"
+            message = f"Hello {assignee.username},\n\nYou have been assigned a new task: {task.title}.\nDescription: {task.description}\n\nBest,\nTaskManager Team"
+            send_mail(
+                subject,
+                message,
+                "nhducminhqt@gmail.com",
+                [assignee.email],
+                fail_silently=False,
+            )
         return CreateTask(task=task)
 
 # Mutation để thêm User
