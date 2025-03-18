@@ -1,9 +1,17 @@
 import graphene
 from graphene_django.types import DjangoObjectType
-from graphene_django.filter import DjangoFilterConnectionField
 from django_filters import FilterSet, CharFilter, OrderingFilter
 from .models import Task
 from django.contrib.auth.models import User
+from .validators import (
+    validate_status,
+    validate_title,
+    validate_description,
+    validate_user_email,
+    validate_username,
+    validate_password,
+    validate_user_exists
+)
 
 # GraphQL Type cho User
 class UserType(DjangoObjectType):
@@ -32,23 +40,16 @@ class TaskFilter(FilterSet):
 
 # Query GraphQL
 class Query(graphene.ObjectType):
-    task = graphene.Field(TaskType, id=graphene.Int(required=True))
     all_tasks = graphene.List(
         TaskType,
         title=graphene.String(),
         owner_username=graphene.String(),
         assignee_username=graphene.String(),
         status=graphene.String(),
-    )    
+    )
     all_users = graphene.List(UserType)
-    tasks_by_owner = graphene.List(TaskType, owner_username=graphene.String(required=True))
-    tasks_by_assignee = graphene.List(TaskType, assignee_username=graphene.String(required=True))
-    tasks_by_title = graphene.List(TaskType, title=graphene.String(required=True))
 
-    def resolve_task(self, info, id):
-        return Task.objects.get(pk=id)
-
-    def resolve_all_tasks(self, info, title=None, owner_username=None, assignee_username=None):
+    def resolve_all_tasks(self, info, title=None, owner_username=None, assignee_username=None, status=None):
         tasks = Task.objects.all()
 
         if title is not None:
@@ -57,19 +58,23 @@ class Query(graphene.ObjectType):
             tasks = tasks.filter(owner__username__icontains=owner_username)
         if assignee_username is not None:
             tasks = tasks.filter(assignee__username__icontains=assignee_username)
+        if status:
+            validate_status(status)
+            tasks = tasks.filter(status=status)
 
         return tasks
 
     def resolve_all_users(self, info):
         return User.objects.all()
+
     def resolve_tasks_by_owner(self, info, owner_username):
         return Task.objects.filter(owner__username__icontains=owner_username)
-    
+
     def resolve_tasks_by_assignee(self, info, assignee_username):
         return Task.objects.filter(assignee__username__icontains=assignee_username)
+
     def resolve_tasks_by_title(self, info, title):
         return Task.objects.filter(title__icontains=title)
-
 
 # Mutation thêm Task
 class CreateTask(graphene.Mutation):
@@ -78,22 +83,27 @@ class CreateTask(graphene.Mutation):
         description = graphene.String()
         owner_id = graphene.Int(required=True)
         assignee_id = graphene.Int()
-        status = graphene.String()  # ✅ Cho phép chọn status khi tạo Task
+        status = graphene.String()
 
     task = graphene.Field(TaskType)
 
     def mutate(self, info, title, owner_id, description=None, assignee_id=None, status="todo"):
-        owner = User.objects.get(id=owner_id)
-        assignee = User.objects.get(id=assignee_id) if assignee_id else None
+        validate_status(status)
+        validate_title(title)
+        if description:
+            validate_description(description)
 
-        # ✅ Kiểm tra giá trị status có hợp lệ không
-        if status not in ["todo", "in_progress", "done"]:
-            raise Exception("Invalid status. Must be 'todo', 'in_progress', or 'done'.")
+        validate_user_exists(owner_id)
+        owner = User.objects.get(id=owner_id)
+
+        assignee = None
+        if assignee_id:
+            validate_user_exists(assignee_id)
+            assignee = User.objects.get(id=assignee_id)
 
         task = Task(title=title, description=description, owner=owner, assignee=assignee, status=status)
         task.save()
         return CreateTask(task=task)
-
 
 # Mutation để thêm User
 class CreateUser(graphene.Mutation):
@@ -105,6 +115,10 @@ class CreateUser(graphene.Mutation):
     user = graphene.Field(UserType)
 
     def mutate(self, info, username, email, password):
+        validate_user_email(email)
+        validate_username(username)
+        validate_password(password)
+
         user = User(username=username, email=email)
         user.set_password(password)
         user.save()
@@ -118,9 +132,14 @@ class DeleteTask(graphene.Mutation):
     success = graphene.Boolean()
 
     def mutate(self, info, id):
-        task = Task.objects.get(pk=id)
-        task.delete()
-        return DeleteTask(success=True)
+        try:
+            task = Task.objects.get(pk=id)
+            task.delete()
+            success = True
+        except Task.DoesNotExist:
+            raise Exception("Task not found")
+        return DeleteTask(success=success)
+
 # Mutation để cập nhật Task
 class UpdateTask(graphene.Mutation):
     class Arguments:
@@ -128,34 +147,36 @@ class UpdateTask(graphene.Mutation):
         title = graphene.String()
         description = graphene.String()
         assignee_id = graphene.Int()
-        status = graphene.String()  # ✅ Cho phép cập nhật status
+        status = graphene.String()
 
     task = graphene.Field(TaskType)
 
     def mutate(self, info, id, title=None, description=None, assignee_id=None, status=None):
-        task = Task.objects.get(pk=id)
-        
-        if title:
+        try:
+            task = Task.objects.get(pk=id)
+        except Task.DoesNotExist:
+            raise Exception("Task not found")
+
+        if title is not None:
+            validate_title(title)
             task.title = title
-        if description:
+        if description is not None:
+            validate_description(description)
             task.description = description
-        if assignee_id:
+        if assignee_id is not None:
+            validate_user_exists(assignee_id)
             task.assignee = User.objects.get(id=assignee_id)
         if status:
-            if status not in ["todo", "in_progress", "done"]:
-                raise Exception("Invalid status. Must be 'todo', 'in_progress', or 'done'.")
+            validate_status(status)
             task.status = status
 
         task.save()
         return UpdateTask(task=task)
-
-
 
 class Mutation(graphene.ObjectType):
     createTask = CreateTask.Field()
     deleteTask = DeleteTask.Field()
     createUser = CreateUser.Field()
     updateTask = UpdateTask.Field()  
-
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
